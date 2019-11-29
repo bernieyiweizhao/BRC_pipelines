@@ -1,0 +1,10 @@
+#/bin/bash
+
+pipeline_path=$(readlink -f $0 | rev | cut -d "/" -f 2- | rev)
+
+ls
+echo -------------------------------
+cd $pipeline_path
+ls
+
+
