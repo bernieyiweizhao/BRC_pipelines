@@ -1,10 +1,16 @@
-#/bin/bash
+#!/bin/bash
 
 pipeline_path=$(readlink -f $0 | rev | cut -d "/" -f 2- | rev)
 
-ls
 echo -------------------------------
+
+samplesheet=$(readlink -f $1)
+run=$(readlink -f $2)
+
 cd $pipeline_path
-ls
 
+source ~/miniconda3/etc/profile.d/conda.sh
+conda activate /brcwork/sequence/tools/rnaseq
 
+# snakemake -n -s scripts/run.smk --config run=$run samplesheet=$samplesheet --cluster "qsub -l h_vmem={params.mem_per_thread} -pe ncpus {params.thread}" -j 100 --latency-wait 30 --dag | dot -Tsvg > test.svg
+snakemake -s scripts/run.smk --config run=$run samplesheet=$samplesheet --cluster "qsub -l h_vmem={params.mem_per_thread} -pe ncpus {params.thread}" -j 100 --latency-wait 30
