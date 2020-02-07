@@ -1,16 +1,77 @@
 #!/bin/bash
 
-pipeline_path=$(readlink -f $0 | rev | cut -d "/" -f 2- | rev)
+print_info () {
+  echo "----------
+  Usage:
+    autorun_rnaseq run [-r RunPath] [-s SamplesheetName]"
+}
 
-echo -------------------------------
+if [ $# == 0 ]; then
+  print_info 
+    exit
+fi
 
-samplesheet=$(readlink -f $1)
-run=$(readlink -f $2)
+action=$1
 
+if ! [[ $action == run ]]; then
+  echo "Missing \"run\""
+  print_info
+  exit
+fi
+
+shift 1
+
+while getopts "r:s:" option; do
+  case "${option}" in
+    r)
+      run=${OPTARG}
+      ;;
+    s)
+      samplesheet=${OPTARG}
+      ;;
+    \?)
+      print_info
+      exit
+      ;;
+  esac
+done
+
+#check input
+
+echo $samplesheet
+echo $run
+
+if ! [[ -f $samplesheet ]]; then 
+  echo "Samplesheet does not exist: $samplesheet"
+  print_info
+  exit
+fi
+
+if ! [[ -d $run ]]; then
+  echo "Run does not exist: $run"
+  print_info
+  exit
+fi
+
+### run pipeline
+samplesheet=$(readlink -e $samplesheet)
+run=$(readlink -e $run)
+pipeline_path=$(readlink -e $0 | rev | cut -d "/" -f 2- | rev)
 cd $pipeline_path
 
 source ~/miniconda3/etc/profile.d/conda.sh
 conda activate /brcwork/sequence/tools/rnaseq
 
+echo $(date)
+D=$(date +%Y%m%d)
+T=$(date +%H%M%S)
+log="log.$(date +%Y%m%d_%H%M%S)"
+echo $log
+
 # snakemake -n -s scripts/run.smk --config run=$run samplesheet=$samplesheet --cluster "qsub -l h_vmem={params.mem_per_thread} -pe ncpus {params.thread}" -j 100 --latency-wait 30 --dag | dot -Tsvg > test.svg
-snakemake -s scripts/run.smk --config run=$run samplesheet=$samplesheet --cluster "qsub -l h_vmem={params.mem_per_thread} -pe ncpus {params.thread}" -j 100 --latency-wait 30
+
+snakemake -s scripts/bcl2fastq.smk --config run=$run samplesheet=$samplesheet log=$log --cluster "qsub -N {params.name} -l h_vmem={params.mem_per_thread} -pe ncpus {params.thread} -e {params.error} -o {params.output}" -j 100 --latency-wait 60
+
+if ! [[ $? == 0 ]]; then exit; fi
+
+snakemake -s scripts/alignment.smk --config samplesheet=$samplesheet log=$log --cluster "qsub -N {params.name} -l h_vmem={params.mem_per_thread} -pe ncpus {params.thread} -e {params.error} -o {params.output}" -j 100 --latency-wait 60
